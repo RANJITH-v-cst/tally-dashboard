@@ -1,0 +1,28 @@
+services:
+  backend:
+    build:
+      context: ./backend
+      dockerfile: ../docker/backend.Dockerfile
+    environment:
+      # Tally runs on the host machine; use host.docker.internal on Mac/Windows,
+      # or the literal gateway 172.17.0.1 on Linux. Users can override from .env.
+      TALLY_URL: ${TALLY_URL:-http://host.docker.internal:9000}
+      CORS_ORIGINS: ${CORS_ORIGINS:-*}
+    ports:
+      - "8787:8787"
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8787/api/health')"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: ../docker/frontend.Dockerfile
+    ports:
+      - "5173:80"
+    depends_on:
+      - backend
