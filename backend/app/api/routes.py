@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 from datetime import date, timedelta
+from typing import Any
 
 from fastapi import APIRouter, Header, Query
 from pydantic import BaseModel
@@ -111,3 +112,16 @@ async def balance_sheet(
 ) -> BalanceSheetResponse:
     data, live = await _service(x_tally_url).balance_sheet(as_of or date.today())
     return BalanceSheetResponse(data=data, used_live_data=live)
+
+
+@router.get("/diagnostics")
+async def diagnostics(
+    x_tally_url: str | None = Header(default=None, alias="X-Tally-Url"),
+) -> dict[str, Any]:
+    """Run every Tally request and report what came back.
+
+    Used by the Settings → Diagnostics panel so users can see exactly
+    which calls succeed / fail and which sections are showing demo data
+    versus live data.
+    """
+    return await _service(x_tally_url).diagnostics()

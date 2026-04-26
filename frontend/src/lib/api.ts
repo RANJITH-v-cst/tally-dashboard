@@ -52,3 +52,27 @@ export async function fetchBalanceSheet(): Promise<WrappedResponse<BalanceSheet>
   const { data } = await http.get<WrappedResponse<BalanceSheet>>('/balance-sheet');
   return data;
 }
+
+export interface DiagnosticStep {
+  label: string;
+  ok: boolean;
+  row_count: number;
+  sample: unknown[];
+  raw_preview: string;
+  envelope_preview: string;
+  error: string | null;
+}
+
+export interface DiagnosticReport {
+  url: string;
+  ping_ok: boolean;
+  latency_ms: number | null;
+  ping_error: string | null;
+  company: string | null;
+  steps: DiagnosticStep[];
+}
+
+export async function fetchDiagnostics(): Promise<DiagnosticReport> {
+  const { data } = await http.get<DiagnosticReport>('/diagnostics');
+  return data;
+}

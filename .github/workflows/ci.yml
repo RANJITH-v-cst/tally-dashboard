@@ -7,7 +7,7 @@ on:
 
 jobs:
   backend:
-    name: Backend · lint & typecheck
+    name: Backend · lint, typecheck & tests
     runs-on: ubuntu-latest
     defaults:
       run:
@@ -25,6 +25,8 @@ jobs:
         run: uv sync --frozen
       - name: Import check
         run: uv run python -c "from app.main import app; print('OK', len(app.routes), 'routes')"
+      - name: Run tests
+        run: uv run pytest -q
 
   frontend:
     name: Frontend · typecheck & build
