@@ -29,12 +29,25 @@ demo dataset so you can explore the UI immediately.
 
 ### Option A — one-command script (recommended)
 
+**Windows** (PowerShell or double-click):
+
+```powershell
+.\start.ps1
+```
+
+Or double-click **`start.bat`** in File Explorer. Opens two terminal windows
+(backend + frontend) and launches `http://localhost:5173` in your default
+browser.
+
+**macOS / Linux**:
+
 ```bash
 ./start.sh
 ```
 
-This installs dependencies on first run, then starts the FastAPI backend on
-`:8787` and the Vite dev server on `:5173`. Open <http://localhost:5173>.
+Either script installs dependencies on first run, then starts the FastAPI
+backend on `:8787` and the Vite dev server on `:5173`. Open
+<http://localhost:5173>.
 
 ### Option B — Docker Compose
 
