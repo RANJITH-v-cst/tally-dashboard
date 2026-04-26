@@ -2,6 +2,10 @@
 
 These envelopes match the format documented in Tally's Developer Reference
 (``https://help.tallysolutions.com``). Dates are always ``YYYYMMDD``.
+
+Where possible we define the collection inline with a `<TDL><COLLECTION>`
+block and a `<FETCH>` list. This is more reliable across TallyPrime
+versions than relying on the gateway's default named reports.
 """
 from __future__ import annotations
 
@@ -13,7 +17,7 @@ def _fmt_date(d: date | None) -> str:
     return d.strftime("%Y%m%d") if d else ""
 
 
-def _wrap(
+def _envelope(
     request_type: str,
     request_id: str,
     static_variables: dict[str, str] | None = None,
@@ -22,7 +26,9 @@ def _wrap(
     sv = ""
     if static_variables:
         sv_inner = "".join(
-            f"<{k}>{escape(v)}</{k}>" for k, v in static_variables.items() if v != ""
+            f"<{k}>{escape(v)}</{k}>"
+            for k, v in static_variables.items()
+            if v != ""
         )
         sv = f"<STATICVARIABLES>{sv_inner}</STATICVARIABLES>"
     return (
@@ -43,113 +49,191 @@ def _wrap(
     )
 
 
-def list_companies() -> str:
-    return _wrap("Collection", "List of Companies")
-
-
-def company_info(company: str) -> str:
-    return _wrap(
-        "Function",
-        "$$CurrentCompany",
-        {"SVCURRENTCOMPANY": company},
-    )
-
-
-def day_book(from_date: date, to_date: date, company: str = "") -> str:
-    return _wrap(
-        "Data",
-        "Day Book",
-        {
-            "SVEXPORTFORMAT": "$$SysName:XML",
-            "SVFROMDATE": _fmt_date(from_date),
-            "SVTODATE": _fmt_date(to_date),
-            "SVCURRENTCOMPANY": company,
-        },
-    )
-
-
-def ledgers() -> str:
+def _collection(
+    name: str,
+    type_: str,
+    fetch: list[str],
+    extra: str = "",
+    static_variables: dict[str, str] | None = None,
+) -> str:
+    """Build a request that defines an inline collection and exports it."""
+    fetch_xml = ",".join(fetch)
     tdl = (
         "<TDL>"
         "<TDLMESSAGE>"
-        '<COLLECTION ISMODIFY="No" NAME="DashboardLedgers">'
-        "<TYPE>Ledger</TYPE>"
-        "<FETCH>Name, Parent, OpeningBalance, ClosingBalance</FETCH>"
+        f'<COLLECTION NAME="{name}" ISMODIFY="No" ISFIXED="No" '
+        'ISINITIALIZE="No" ISOPTION="No" ISINTERNAL="No">'
+        f"<TYPE>{type_}</TYPE>"
+        f"<FETCH>{fetch_xml}</FETCH>"
+        f"{extra}"
         "</COLLECTION>"
         "</TDLMESSAGE>"
         "</TDL>"
     )
-    return _wrap("Collection", "DashboardLedgers", tdl=tdl)
+    sv = {"SVEXPORTFORMAT": "$$SysName:XML"}
+    if static_variables:
+        sv.update(static_variables)
+    return _envelope("Collection", name, sv, tdl)
+
+
+# ---------------------------------------------------------------------------
+# Companies
+# ---------------------------------------------------------------------------
+
+
+def list_companies() -> str:
+    """All companies the running Tally instance knows about (loaded or not)."""
+    return _collection(
+        "DashListOfCompanies",
+        "Company",
+        ["NAME", "STARTINGFROM", "BOOKSFROM", "STATENAME", "FORMALNAME"],
+    )
+
+
+def loaded_companies() -> str:
+    """Only companies that are currently *loaded* (open) in Tally."""
+    return _collection(
+        "DashLoadedCompanies",
+        "Company",
+        ["NAME", "STARTINGFROM", "BOOKSFROM", "STATENAME", "FORMALNAME"],
+        extra="<FILTER>IsLoaded</FILTER>"
+        "<SYSTEM TYPE=\"Formulae\" NAME=\"IsLoaded\">$$IsCmpLoaded:$NAME</SYSTEM>",
+    )
+
+
+# ---------------------------------------------------------------------------
+# Day Book (vouchers within a date range)
+# ---------------------------------------------------------------------------
+
+
+def day_book(from_date: date, to_date: date, company: str = "") -> str:
+    sv: dict[str, str] = {
+        "SVEXPORTFORMAT": "$$SysName:XML",
+        "SVFROMDATE": _fmt_date(from_date),
+        "SVTODATE": _fmt_date(to_date),
+    }
+    if company:
+        sv["SVCURRENTCOMPANY"] = company
+    return _envelope("Data", "Day Book", sv)
+
+
+# ---------------------------------------------------------------------------
+# Ledgers
+# ---------------------------------------------------------------------------
+
+
+def ledgers(company: str = "") -> str:
+    sv = {"SVCURRENTCOMPANY": company} if company else None
+    return _collection(
+        "DashLedgers",
+        "Ledger",
+        [
+            "NAME",
+            "PARENT",
+            "OPENINGBALANCE",
+            "CLOSINGBALANCE",
+            "MAILINGNAME",
+            "GSTREGISTRATIONTYPE",
+            "PARTYGSTIN",
+        ],
+        static_variables=sv,
+    )
+
+
+def groups(company: str = "") -> str:
+    sv = {"SVCURRENTCOMPANY": company} if company else None
+    return _collection(
+        "DashGroups",
+        "Group",
+        ["NAME", "PARENT", "PRIMARYGROUP", "RESERVEDNAME"],
+        static_variables=sv,
+    )
+
+
+# ---------------------------------------------------------------------------
+# Stock
+# ---------------------------------------------------------------------------
+
+
+def stock_items(company: str = "") -> str:
+    sv = {"SVCURRENTCOMPANY": company} if company else None
+    return _collection(
+        "DashStockItems",
+        "StockItem",
+        [
+            "NAME",
+            "PARENT",
+            "BASEUNITS",
+            "OPENINGBALANCE",
+            "OPENINGRATE",
+            "OPENINGVALUE",
+            "CLOSINGBALANCE",
+            "CLOSINGRATE",
+            "CLOSINGVALUE",
+        ],
+        static_variables=sv,
+    )
 
 
 def stock_summary(company: str = "") -> str:
-    return _wrap(
-        "Data",
-        "Stock Summary",
-        {
-            "SVEXPORTFORMAT": "$$SysName:XML",
-            "SVCURRENTCOMPANY": company,
-        },
-    )
+    sv: dict[str, str] = {"SVEXPORTFORMAT": "$$SysName:XML"}
+    if company:
+        sv["SVCURRENTCOMPANY"] = company
+    return _envelope("Data", "Stock Summary", sv)
+
+
+# ---------------------------------------------------------------------------
+# Trial Balance / P&L / Balance Sheet (built-in reports)
+# ---------------------------------------------------------------------------
 
 
 def trial_balance(from_date: date, to_date: date, company: str = "") -> str:
-    return _wrap(
-        "Data",
-        "Trial Balance",
-        {
-            "SVEXPORTFORMAT": "$$SysName:XML",
-            "SVFROMDATE": _fmt_date(from_date),
-            "SVTODATE": _fmt_date(to_date),
-            "SVCURRENTCOMPANY": company,
-        },
-    )
+    sv: dict[str, str] = {
+        "SVEXPORTFORMAT": "$$SysName:XML",
+        "SVFROMDATE": _fmt_date(from_date),
+        "SVTODATE": _fmt_date(to_date),
+    }
+    if company:
+        sv["SVCURRENTCOMPANY"] = company
+    return _envelope("Data", "Trial Balance", sv)
 
 
 def profit_loss(from_date: date, to_date: date, company: str = "") -> str:
-    return _wrap(
-        "Data",
-        "Profit & Loss",
-        {
-            "SVEXPORTFORMAT": "$$SysName:XML",
-            "SVFROMDATE": _fmt_date(from_date),
-            "SVTODATE": _fmt_date(to_date),
-            "SVCURRENTCOMPANY": company,
-        },
-    )
+    sv: dict[str, str] = {
+        "SVEXPORTFORMAT": "$$SysName:XML",
+        "SVFROMDATE": _fmt_date(from_date),
+        "SVTODATE": _fmt_date(to_date),
+    }
+    if company:
+        sv["SVCURRENTCOMPANY"] = company
+    return _envelope("Data", "Profit & Loss", sv)
 
 
 def balance_sheet(as_of: date, company: str = "") -> str:
-    return _wrap(
-        "Data",
-        "Balance Sheet",
-        {
-            "SVEXPORTFORMAT": "$$SysName:XML",
-            "SVTODATE": _fmt_date(as_of),
-            "SVCURRENTCOMPANY": company,
-        },
-    )
+    sv: dict[str, str] = {
+        "SVEXPORTFORMAT": "$$SysName:XML",
+        "SVTODATE": _fmt_date(as_of),
+    }
+    if company:
+        sv["SVCURRENTCOMPANY"] = company
+    return _envelope("Data", "Balance Sheet", sv)
 
 
 def outstanding_receivables(as_of: date, company: str = "") -> str:
-    return _wrap(
-        "Data",
-        "Bills Receivable",
-        {
-            "SVEXPORTFORMAT": "$$SysName:XML",
-            "SVTODATE": _fmt_date(as_of),
-            "SVCURRENTCOMPANY": company,
-        },
-    )
+    sv: dict[str, str] = {
+        "SVEXPORTFORMAT": "$$SysName:XML",
+        "SVTODATE": _fmt_date(as_of),
+    }
+    if company:
+        sv["SVCURRENTCOMPANY"] = company
+    return _envelope("Data", "Bills Receivable", sv)
 
 
 def outstanding_payables(as_of: date, company: str = "") -> str:
-    return _wrap(
-        "Data",
-        "Bills Payable",
-        {
-            "SVEXPORTFORMAT": "$$SysName:XML",
-            "SVTODATE": _fmt_date(as_of),
-            "SVCURRENTCOMPANY": company,
-        },
-    )
+    sv: dict[str, str] = {
+        "SVEXPORTFORMAT": "$$SysName:XML",
+        "SVTODATE": _fmt_date(as_of),
+    }
+    if company:
+        sv["SVCURRENTCOMPANY"] = company
+    return _envelope("Data", "Bills Payable", sv)
