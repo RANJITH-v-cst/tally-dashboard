@@ -8,8 +8,10 @@ import {
   BookOpen,
   Scale,
   Settings as SettingsIcon,
+  LogOut,
 } from 'lucide-react';
 import ConnectionBadge from './ConnectionBadge';
+import { useAuth } from '../hooks/useAuth';
 
 const nav = [
   { to: '/', label: 'Dashboard', icon: LayoutDashboard, end: true },
@@ -23,6 +25,8 @@ const nav = [
 ];
 
 export default function Layout() {
+  const { user, signOut } = useAuth();
+
   return (
     <div className="min-h-screen flex">
       <aside className="w-60 shrink-0 border-r border-white/5 bg-surface-card/60 backdrop-blur px-4 py-5 flex flex-col gap-6">
@@ -52,9 +56,23 @@ export default function Layout() {
             </NavLink>
           ))}
         </nav>
-        <div className="mt-auto text-[11px] text-slate-500 leading-relaxed">
-          <p className="font-medium text-slate-400">Tip</p>
-          <p>Enable Tally's ODBC server on port 9000, then set the URL in Settings.</p>
+        <div className="mt-auto space-y-3">
+          {user && (
+            <div className="flex items-center gap-2 text-xs text-slate-400 truncate px-1">
+              <span className="truncate">{user.email}</span>
+            </div>
+          )}
+          <button
+            onClick={signOut}
+            className="flex items-center gap-2.5 px-3 py-2 rounded-lg text-sm text-slate-300 hover:bg-white/5 border border-transparent transition w-full"
+          >
+            <LogOut size={16} />
+            Sign Out
+          </button>
+          <div className="text-[11px] text-slate-500 leading-relaxed">
+            <p className="font-medium text-slate-400">Tip</p>
+            <p>Enable Tally's ODBC server on port 9000, then set the URL in Settings.</p>
+          </div>
         </div>
       </aside>
       <main className="flex-1 min-w-0">
